@@ -1,4 +1,8 @@
 @import "tailwindcss";
+@import '@fontsource/bebas-neue';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/700.css';
 
 @theme {
     /* You can add custom theme configuration here if needed, or stick to tailwind.config.js for migration */
@@ -18,10 +22,41 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+
+    --color-brand-purple: #7C3AED;
+    --color-accent-pink: #EC4899;
+    --color-gold: #F59E0B;
+    --color-bg-base: #0A0A0F;
+    --color-bg-surface: #141420;
+    --gradient-brand: linear-gradient(135deg, #7C3AED, #EC4899);
+    --shadow-glow-purple: 0 0 30px rgba(124, 58, 237, 0.4);
+    --shadow-glow-pink: 0 0 30px rgba(236, 72, 153, 0.3);
 }
 
 body {
     margin: 0;
     min-width: 320px;
     min-height: 100vh;
+    background-color: #0A0A0F;
+    font-family: 'Inter', sans-serif;
+    color: #F9FAFB;
+}
+
+.text-display {
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 0.02em;
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #141420;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #7C3AED;
+    border-radius: 999px;
 }

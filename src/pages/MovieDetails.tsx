@@ -1,13 +1,27 @@
-import { Calendar, Clock, Play, Plus, Share2, Star } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Play, Share2, Star, Bookmark, BookmarkCheck } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FastAverageColor } from 'fast-average-color';
 import { getMovieDetails } from '../services/api';
+import { useCollectionsStore } from '../store/collections';
+import { useReducedMotion } from '../hooks/useReducedMotion';
+import GenreChip from '../components/ui/GenreChip';
+import GlassCard from '../components/ui/GlassCard';
 import type { MovieDetails } from '../types/ui';
 
 const MediaDetails = () => {
     const { id } = useParams<{ id: string }>();
+    const prefersReducedMotion = useReducedMotion();
     const [movie, setMovie] = useState<MovieDetails | null>(null);
     const [loading, setLoading] = useState(true);
+    const [confetti, setConfetti] = useState<Array<{ id: number; x: number; y: number; vx: number; vy: number; color: string }>>([]);
+    const [trailerPlaying, setTrailerPlaying] = useState(false);
+    const [ambientColor, setAmbientColor] = useState('rgba(124, 58, 237, 0.3)');
+    const posterImgRef = useRef<HTMLImageElement>(null);
+
+    // Zustand store
+    const { isItemInAnyCollection, addItem, collections } = useCollectionsStore();
 
     useEffect(() => {
         if (!id) return;
@@ -25,93 +39,411 @@ const MediaDetails = () => {
 
     const bgImage = movie.imageSet?.horizontalPoster?.w1080;
     const posterImage = movie.imageSet?.verticalPoster?.w720;
+    const isSaved = isItemInAnyCollection(typeof movie.id === 'string' ? parseInt(movie.id, 10) : movie.id);
+    const defaultWatchlist = collections.find(c => c.isDefault);
+
+    // Confetti burst animation
+    const createConfetti = () => {
+        const colors = ['#7C3AED', '#EC4899', '#F59E0B', '#06B6D4'];
+        const newConfetti = Array.from({ length: 12 }, (_, i) => {
+            const angle = (i / 12) * Math.PI * 2;
+            const velocity = 3 + Math.random() * 2;
+            return {
+                id: i,
+                x: 0,
+                y: 0,
+                vx: Math.cos(angle) * velocity,
+                vy: Math.sin(angle) * velocity,
+                color: colors[Math.floor(Math.random() * colors.length)],
+            };
+        });
+        setConfetti(newConfetti);
+
+        // Clear confetti after animation
+        setTimeout(() => setConfetti([]), 1500);
+    };
+
+    // Extract color from poster for ambient glow
+    const handlePosterLoad = async () => {
+        if (!posterImgRef.current) return;
+        try {
+            const fac = new FastAverageColor();
+            const color = await fac.getColor(posterImgRef.current);
+            setAmbientColor(`rgba(${color.value[0]}, ${color.value[1]}, ${color.value[2]}, 0.3)`);
+        } catch (error) {
+            console.error('Failed to extract color:', error);
+            setAmbientColor('rgba(124, 58, 237, 0.3)');
+        }
+    };
+
+    // Save to watchlist
+    const handleSaveToWatchlist = () => {
+        if (!movie || !defaultWatchlist) return;
+        addItem(defaultWatchlist.id, movie);
+        createConfetti();
+    };
 
     return (
-        <div className="-mt-6"> {/* Negative margin to offset container padding for hero effect */}
-            {/* Hero Background */}
-            <div className="relative h-[60vh] w-full">
-                <div className="absolute inset-0">
-                    <img
-                        src={bgImage}
-                        alt=""
-                        className="w-full h-full object-cover opacity-50"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#1A1A1A] via-[#1A1A1A]/60 to-transparent" />
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#1A1A1A] via-transparent to-transparent" />
-                </div>
+        <div>
+            {/* Backdrop */}
+            <div
+                className="relative w-full overflow-hidden"
+                style={{
+                    height: '55vh',
+                }}
+            >
+                <img
+                    src={bgImage}
+                    alt={`${movie.title} backdrop`}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    style={{
+                        filter: 'blur(2px)',
+                        transform: 'scale(1.05)',
+                    }}
+                />
+                <div
+                    className="absolute inset-0"
+                    style={{
+                        background: 'linear-gradient(to bottom, rgba(10,10,15,0.3) 0%, #0A0A0F 100%)',
+                        pointerEvents: 'none',
+                    }}
+                />
+            </div>
 
-                <div className="absolute bottom-0 left-0 w-full p-8 container mx-auto flex items-end gap-8">
-                    {/* Poster (Hidden on mobile, visible on tablet+) */}
-                    <div className="hidden md:block w-64 rounded-xl overflow-hidden shadow-2xl border border-white/10 flex-shrink-0">
-                        <img src={posterImage} alt={movie.title} className="w-full h-auto" />
-                    </div>
+            {/* Content Area with 2 Columns */}
+            <div className="px-4 md:px-8">
+                <div className="max-w-7xl mx-auto flex gap-8 -mt-20 relative z-10">
+                    {/* Left Column - Poster */}
+                    <motion.div
+                        className="shrink-0 w-56 hidden md:block relative"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.6, delay: 0.1 }}
+                    >
+                        {/* Ambient Glow Background */}
+                        <div
+                            className="absolute inset-0 rounded-2xl"
+                            style={{
+                                background: `radial-gradient(ellipse at 30% 50%, ${ambientColor} 0%, transparent 70%)`,
+                                opacity: 0.6,
+                                transition: 'background 1s ease',
+                                filter: 'blur(20px)',
+                            }}
+                        />
+                        <img
+                            ref={posterImgRef}
+                            src={posterImage}
+                            alt={movie.title}
+                            className="w-full rounded-2xl relative z-10"
+                            onLoad={handlePosterLoad}
+                            style={{
+                                boxShadow: '0 8px 40px rgba(0, 0, 0, 0.8)',
+                            }}
+                        />
+                    </motion.div>
 
-                    <div className="space-y-6 max-w-2xl mb-8">
-                        <h1 className="text-5xl font-bold leading-tight drop-shadow-2xl">{movie.title}</h1>
+                    {/* Right Column - Content in GlassCard */}
+                    <div className="flex-1 mt-8">
+                        <GlassCard padding="lg">
+                            <div className="space-y-6">
+                                {/* Title */}
+                                <h1
+                                    className="font-display text-white leading-tight"
+                                    style={{
+                                        fontSize: 'clamp(36px, 5vw, 64px)',
+                                    }}
+                                >
+                                    {movie.title}
+                                </h1>
 
-                        <div className="flex flex-wrap items-center gap-4 text-sm font-medium text-gray-300">
-                            {movie.rating && (
-                                <div className="flex items-center gap-1.5 text-yellow-400 bg-yellow-400/10 px-2 py-1 rounded">
-                                    <Star size={16} fill="currentColor" />
-                                    <span>{movie.rating.toFixed(1)}</span>
+                                {/* Meta Row - Year, Runtime, Rating */}
+                                <div
+                                    className="flex items-center gap-2 flex-wrap"
+                                    style={{
+                                        fontSize: '14px',
+                                        color: '#9CA3AF',
+                                    }}
+                                >
+                                    {movie.year && (
+                                        <>
+                                            <span>{movie.year}</span>
+                                            <span>•</span>
+                                        </>
+                                    )}
+                                    {movie.runtime && (
+                                        <>
+                                            <span>{movie.runtime}</span>
+                                            <span>•</span>
+                                        </>
+                                    )}
+                                    {movie.rating && (
+                                        <div className="flex items-center gap-1">
+                                            <Star size={14} fill="#F59E0B" style={{ color: '#F59E0B' }} />
+                                            <span style={{ color: '#F9FAFB' }}>{movie.rating.toFixed(1)}</span>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                            <span className="flex items-center gap-1.5">
-                                <Calendar size={16} />
-                                {movie.year}
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                                <Clock size={16} />
-                                {movie.runtime}
-                            </span>
-                            <div className="flex gap-2">
-                                {movie.genres?.map(g => (
-                                    <span key={g.id} className="px-2 py-1 bg-white/10 rounded-md text-xs backdrop-blur-md border border-white/5">
-                                        {g.name}
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
 
-                        <div className="flex gap-4 pt-2">
-                            <button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-lg shadow-indigo-600/20">
-                                <Play size={20} fill="currentColor" />
-                                Watch Trailer
-                            </button>
-                            <button className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-medium backdrop-blur-md transition-all">
-                                <Plus size={20} />
-                                Add to List
-                            </button>
-                            <button className="p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
-                                <Share2 size={20} />
-                            </button>
-                        </div>
+                                {/* Genre Chips */}
+                                {movie.genres && movie.genres.length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                        {movie.genres.map((genre) => (
+                                            <GenreChip
+                                                key={genre.id}
+                                                label={genre.name}
+                                                active={false}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Overview */}
+                                <p
+                                    className="leading-relaxed"
+                                    style={{
+                                        fontSize: '15px',
+                                        color: '#D1D5DB',
+                                        maxWidth: '600px',
+                                        lineHeight: '1.7',
+                                    }}
+                                >
+                                    {movie.overview}
+                                </p>
+
+                                {/* Action Buttons */}
+                                <div className="relative flex gap-3 pt-4">
+                                    {/* Watch Trailer Button */}
+                                    <button
+                                        style={{
+                                            background: 'transparent',
+                                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                                            borderRadius: '999px',
+                                            padding: '14px 32px',
+                                            color: 'white',
+                                            fontSize: '15px',
+                                            fontWeight: '500',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            transition: 'all 0.2s',
+                                        }}
+                                        className="hover:bg-[rgba(255,255,255,0.06)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7C3AED]"
+                                        aria-label={`Watch trailer for ${movie.title}`}
+                                    >
+                                        <Play size={16} fill="white" />
+                                        Watch Trailer
+                                    </button>
+
+                                    {/* Save to Watchlist Button - Primary CTA */}
+                                    <button
+                                        onClick={handleSaveToWatchlist}
+                                        style={{
+                                            background: isSaved
+                                                ? 'linear-gradient(to right, rgba(124, 58, 237, 0.2), rgba(236, 72, 153, 0.2))'
+                                                : 'linear-gradient(135deg, #7C3AED, #EC4899)',
+                                            border: isSaved ? '1px solid rgba(124, 58, 237, 0.5)' : 'none',
+                                            borderRadius: '999px',
+                                            padding: '14px 32px',
+                                            color: 'white',
+                                            fontSize: '15px',
+                                            fontWeight: '600',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            transition: 'all 0.2s',
+                                        }}
+                                        className="hover:scale-105 transition-transform focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7C3AED]"
+                                        aria-label={isSaved ? `Remove ${movie.title} from watchlist` : `Add ${movie.title} to watchlist`}
+                                    >
+                                        <AnimatePresence mode="wait">
+                                            {isSaved ? (
+                                                <motion.div
+                                                    key="saved"
+                                                    initial={{ scale: prefersReducedMotion ? 1 : 0, rotate: prefersReducedMotion ? 0 : -180 }}
+                                                    animate={{ scale: 1, rotate: 0 }}
+                                                    exit={{ scale: prefersReducedMotion ? 1 : 0, rotate: prefersReducedMotion ? 0 : 180 }}
+                                                    transition={{ duration: prefersReducedMotion ? 0.01 : 0.3 }}
+                                                >
+                                                    <BookmarkCheck size={16} fill="white" />
+                                                </motion.div>
+                                            ) : (
+                                                <motion.div
+                                                    key="unsaved"
+                                                    initial={{ scale: prefersReducedMotion ? 1 : 0, rotate: prefersReducedMotion ? 0 : -180 }}
+                                                    animate={{ scale: 1, rotate: 0 }}
+                                                    exit={{ scale: prefersReducedMotion ? 1 : 0, rotate: prefersReducedMotion ? 0 : 180 }}
+                                                    transition={{ duration: prefersReducedMotion ? 0.01 : 0.3 }}
+                                                >
+                                                    <Bookmark size={16} />
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                        {isSaved ? 'Saved to Watchlist' : 'Save to Watchlist'}
+                                    </button>
+
+                                    {/* Share Button */}
+                                    <button
+                                        style={{
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            borderRadius: '999px',
+                                            padding: '14px 20px',
+                                            color: 'white',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            transition: 'all 0.2s',
+                                        }}
+                                        className="hover:bg-[rgba(255,255,255,0.1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7C3AED]"
+                                        aria-label="Share this movie"
+                                    >
+                                        <Share2 size={16} />
+                                    </button>
+
+                                    {/* Confetti Effect */}
+                                    {confetti.map((particle) => (
+                                        <motion.div
+                                            key={particle.id}
+                                            className="absolute pointer-events-none rounded-full"
+                                            initial={{
+                                                x: 0,
+                                                y: 0,
+                                                opacity: 1,
+                                                scale: 1,
+                                            }}
+                                            animate={{
+                                                x: prefersReducedMotion ? 0 : particle.vx * 100,
+                                                y: prefersReducedMotion ? 0 : particle.vy * 100,
+                                                opacity: 0,
+                                                scale: 0,
+                                            }}
+                                            transition={{
+                                                duration: prefersReducedMotion ? 0.01 : 1.5,
+                                                ease: 'easeOut',
+                                            }}
+                                            style={{
+                                                width: '6px',
+                                                height: '6px',
+                                                backgroundColor: particle.color,
+                                                left: '50%',
+                                                top: '50%',
+                                                marginLeft: '-3px',
+                                                marginTop: '-3px',
+                                            }}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        </GlassCard>
                     </div>
                 </div>
             </div>
 
-            <div className="container mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-12">
+            {/* Cast & Details Section */}
+            <div className="container mx-auto px-4 py-12 grid grid-cols-1 lg:grid-cols-3 gap-12">
                 {/* Main Content */}
                 <div className="lg:col-span-2 space-y-8">
+                    {/* Trailer Section */}
+                    <section>
+                        <h3 className="font-display text-3xl text-white mb-6 pb-3 border-b-4 border-brand-purple" style={{ fontSize: '36px' }}>
+                            Trailer
+                        </h3>
+                        <div
+                            className="relative rounded-3xl overflow-hidden"
+                            style={{
+                                aspectRatio: '16 / 9',
+                                background: '#0A0A0F',
+                            }}
+                        >
+                            <iframe
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    border: 'none',
+                                    borderRadius: '16px',
+                                }}
+                                src={trailerPlaying ? 'https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1' : 'https://www.youtube.com/embed/dQw4w9WgXcQ'}
+                                title="Movie Trailer"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                            />
+
+                            {/* Play Overlay */}
+                            <AnimatePresence>
+                                {!trailerPlaying && (
+                                    <motion.div
+                                        className="absolute inset-0 flex items-center justify-center"
+                                        style={{
+                                            background: 'rgba(10, 10, 15, 0.6)',
+                                            backdropFilter: 'blur(4px)',
+                                            WebkitBackdropFilter: 'blur(4px)',
+                                        }}
+                                        initial={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={{ duration: 0.3 }}
+                                        onClick={() => setTrailerPlaying(true)}
+                                    >
+                                        <motion.button
+                                            className="rounded-full flex items-center justify-center"
+                                            style={{
+                                                width: '72px',
+                                                height: '72px',
+                                                background: 'linear-gradient(135deg, #7C3AED, #EC4899)',
+                                                border: 'none',
+                                                cursor: 'pointer',
+                                            }}
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.95 }}
+                                        >
+                                            <Play size={32} fill="white" color="white" />
+                                        </motion.button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    </section>
+
+                    {/* Overview Section */}
                     <section>
                         <h3 className="text-xl font-semibold mb-3 text-gray-200">Overview</h3>
                         <p className="text-gray-400 leading-relaxed text-lg">{movie.overview}</p>
                     </section>
 
+                    {/* Cast Section */}
                     {movie.cast && movie.cast.length > 0 && (
                         <section>
-                            <h3 className="text-xl font-semibold mb-4 text-gray-200">Cast</h3>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {movie.cast.map(actor => (
-                                    <div key={actor.id} className="flex items-center gap-3 bg-white/5 p-2 rounded-lg">
-                                        <div className="w-10 h-10 rounded-full bg-gray-700 overflow-hidden">
-                                            <img src={actor.image} alt={actor.name} className="w-full h-full object-cover" />
+                            <h3 className="font-display text-3xl text-white mb-6 pb-3 border-b-4 border-brand-purple" style={{ fontSize: '36px' }}>
+                                Cast
+                            </h3>
+                            <div className="flex overflow-x-auto gap-4 pb-4 scrollbar-hide">
+                                {movie.cast.map((actor) => (
+                                    <motion.div
+                                        key={actor.id}
+                                        className="shrink-0 flex flex-col items-center gap-3 text-center"
+                                        whileHover={{ scale: 1.05 }}
+                                        transition={{ duration: 0.2 }}
+                                    >
+                                        <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-700 border-2 border-brand-purple/20">
+                                            <img
+                                                src={actor.image}
+                                                alt={actor.name}
+                                                className="w-full h-full object-cover"
+                                            />
                                         </div>
-                                        <div>
-                                            <p className="text-sm font-medium text-white line-clamp-1">{actor.name}</p>
-                                            <p className="text-xs text-gray-500 line-clamp-1">{actor.role}</p>
-                                        </div>
-                                    </div>
+                                        <motion.p
+                                            className="text-sm font-bold text-white w-24 line-clamp-2"
+                                            whileHover={{ color: '#C4B5FD' }}
+                                            transition={{ duration: 0.2 }}
+                                        >
+                                            {actor.name}
+                                        </motion.p>
+                                        <p className="text-xs text-text-muted w-24 line-clamp-2" style={{ color: '#9CA3AF' }}>
+                                            {actor.role}
+                                        </p>
+                                    </motion.div>
                                 ))}
                             </div>
                         </section>
