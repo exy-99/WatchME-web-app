@@ -1,4 +1,4 @@
-import { Search as SearchIcon, Film } from 'lucide-react';
+import { Search as SearchIcon, Film, Loader2 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import MediaCard from '../components/MediaCard';
@@ -12,6 +12,10 @@ const Search = () => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<Movie[]>([]);
     const [loading, setLoading] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [currentQuery, setCurrentQuery] = useState('');
     const [isFocused, setIsFocused] = useState(false);
     const [placeholderIndex, setPlaceholderIndex] = useState(0);
     const placeholderRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -40,13 +44,33 @@ const Search = () => {
         if (!query.trim()) return;
 
         setLoading(true);
+        setResults([]);
+        setPage(1);
+        setCurrentQuery(query);
         try {
-            const data = await searchMovies(query);
-            setResults(data);
+            const { results: newResults, totalPages: total } = await searchMovies(query, 1);
+            setResults(newResults);
+            setTotalPages(total);
         } catch (error) {
             console.error(error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleLoadMore = async () => {
+        if (loadingMore) return;
+        setLoadingMore(true);
+        try {
+            const nextPage = page + 1;
+            const { results: newResults, totalPages: total } = await searchMovies(currentQuery, nextPage);
+            setResults(prev => [...prev, ...newResults]);
+            setPage(nextPage);
+            setTotalPages(total);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoadingMore(false);
         }
     };
 
@@ -101,7 +125,7 @@ const Search = () => {
                     <div className="max-w-7xl mx-auto">
                         <div style={{
                             display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
                             gap: '20px',
                         }}>
                             {Array.from({ length: 8 }).map((_, i) => (
@@ -124,17 +148,13 @@ const Search = () => {
                             animate={{ opacity: 1 }}
                             transition={{ duration: 0.3 }}
                         >
-                            {results.length} results for '{query}'
+                            {results.length} results for '{currentQuery}'
                         </motion.p>
 
                         {/* Results Grid */}
                         <AnimatePresence mode="popLayout">
                             <motion.div
-                                style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-                                    gap: '20px',
-                                }}
+                                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5"
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
@@ -155,11 +175,44 @@ const Search = () => {
                                         }}
                                         role="listitem"
                                     >
-                                        <MediaCard item={movie} width="w-full" height="h-64" />
+                                        <MediaCard item={movie} width="w-full" height="h-[300px]" />
                                     </motion.div>
                                 ))}
                             </motion.div>
                         </AnimatePresence>
+
+                        {/* Load More Button */}
+                        {page < totalPages && !loading && (
+                            <div className="flex justify-center" style={{ marginTop: '40px' }}>
+                                <button
+                                    onClick={handleLoadMore}
+                                    disabled={loadingMore}
+                                    style={{
+                                        border: '1px solid rgba(124,58,237,0.4)',
+                                        borderRadius: '999px',
+                                        padding: '12px 40px',
+                                        color: '#C4B5FD',
+                                        background: 'transparent',
+                                        fontSize: '15px',
+                                        fontWeight: '500',
+                                        fontFamily: 'Inter, sans-serif',
+                                        cursor: loadingMore ? 'not-allowed' : 'pointer',
+                                        opacity: loadingMore ? 0.7 : 1,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        transition: 'border-color 0.2s, color 0.2s',
+                                    }}
+                                >
+                                    {loadingMore ? (
+                                        <>
+                                            <Loader2 size={16} className="animate-spin" />
+                                            Loading...
+                                        </>
+                                    ) : 'Load More'}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 ) : query ? (
                     // No results state

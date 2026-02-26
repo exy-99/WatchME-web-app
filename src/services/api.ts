@@ -181,25 +181,35 @@ export const getMovieDetails = async (id: string): Promise<MovieDetails | null> 
 export const getMovieByImdbId = getMovieDetails;
 
 // 4. Search
-// 4. Search
-export const searchMovies = async (query: string): Promise<Movie[]> => {
-    // Explicitly requesting fields to ensure we get genres for filtering
-    const data = await fetchSimkl<SimklItem[]>('/search/movie', {
-        q: query,
-        extended: 'overview,metadata,genres,poster,tmdb'
-    });
+export const searchMovies = async (query: string, page: number = 1): Promise<{ results: Movie[]; totalPages: number }> => {
+    try {
+        // Direct axios call (instead of fetchSimkl) so we can read pagination headers
+        const response = await simklClient.get<SimklItem[]>('/search/movie', {
+            params: {
+                q: query,
+                page,
+                limit: 20,
+                extended: 'overview,metadata,genres,poster,tmdb',
+                client_id: VITE_SIMKL_CLIENT_ID,
+            },
+        });
 
-    if (!data) return [];
+        const data = response.data;
+        const totalPages = parseInt(response.headers['x-pagination-page-count'] ?? '1', 10) || 1;
 
-    // Map initial results
-    const movies = data.map(mapSimklToMovie);
+        if (!data || data.length === 0) return { results: [], totalPages };
 
-    // Enrich the top 10 results with full details to get genres
-    // We do this because the search endpoint doesn't return genres reliably
-    const enriched = await enrichMoviesWithDetails(movies.slice(0, 10));
+        // Map initial results
+        const movies = data.map(mapSimklToMovie);
 
-    // Combine enriched top results with the rest of the list
-    return [...enriched, ...movies.slice(10)];
+        // Enrich the top 10 results with full details to get genres
+        const enriched = await enrichMoviesWithDetails(movies.slice(0, 10));
+
+        return { results: [...enriched, ...movies.slice(10)], totalPages };
+    } catch (error) {
+        console.error('[API] searchMovies error:', error);
+        return { results: [], totalPages: 1 };
+    }
 };
 
 // Helper to enrich movies with full details (for genres)
@@ -243,7 +253,7 @@ export const getGenres = async (): Promise<string[]> => [
     'Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Fantasy', 'Horror', 'Music', 'Mystery', 'Romance', 'Science Fiction', 'Thriller', 'War', 'Western'
 ];
 
-export const getMoviesByKeywords = searchMovies;
+export const getMoviesByKeywords = async (query: string) => (await searchMovies(query)).results;
 export const getMoviesOrderByRating = getTopRatedMovies;
 export const getMoviesOrderByPopularity = getHeroMovies;
 // Simkl doesn't have direct "by year" simple endpoint without genre/filter combo, simplified stub
@@ -273,7 +283,7 @@ export const getMoviesKnownForByActorId = async (_id: string) => [];
 export const getSeriesKnownForByActorId = async (_id: string) => [];
 export const getAllRolesByActorId = async (_id: string) => [];
 
-export const getSimilarMovies = searchMovies; // Fallback
+export const getSimilarMovies = async (query: string) => (await searchMovies(query)).results; // Fallback
 export const getSimilarSeries = async (_query: string) => [];
 
 // 6. Generic Fetch for MediaFeed

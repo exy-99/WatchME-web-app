@@ -1,13 +1,111 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, type CSSProperties, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import MediaCard from '../components/MediaCard';
 import GenreChip from '../components/ui/GenreChip';
 import { getContentRows, getHeroMovies } from '../services/api';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import type { Movie } from '../types/ui';
 
+// ── Reusable scroll row wrapper ────────────────────────────────────────────
+const ScrollRow = ({ children, ariaLabel }: { children: ReactNode; ariaLabel: string }) => {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [canScrollLeft, setCanScrollLeft] = useState(false);
+    const [canScrollRight, setCanScrollRight] = useState(true);
+    const [isRowHovered, setIsRowHovered] = useState(false);
+
+    const updateScrollState = () => {
+        const el = scrollRef.current;
+        if (!el) return;
+        setCanScrollLeft(el.scrollLeft > 0);
+        setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+    };
+
+    const scroll = (dir: 'left' | 'right') => {
+        scrollRef.current?.scrollBy({ left: dir === 'left' ? -500 : 500, behavior: 'smooth' });
+    };
+
+    const arrowStyle: CSSProperties = {
+        position: 'absolute',
+        top: '50%',
+        transform: 'translateY(-50%)',
+        zIndex: 10,
+        width: '44px',
+        height: '44px',
+        borderRadius: '50%',
+        background: 'rgba(10,10,15,0.9)',
+        border: '1px solid rgba(124,58,237,0.4)',
+        color: 'white',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        flexShrink: 0,
+    };
+
+    return (
+        <div
+            className="relative"
+            onMouseEnter={() => setIsRowHovered(true)}
+            onMouseLeave={() => setIsRowHovered(false)}
+        >
+            {/* Left arrow */}
+            <motion.button
+                aria-label="Scroll left"
+                onClick={() => scroll('left')}
+                style={{ ...arrowStyle, left: 0 }}
+                animate={{ opacity: isRowHovered && canScrollLeft ? 1 : 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                tabIndex={canScrollLeft ? 0 : -1}
+            >
+                <ChevronLeft size={20} />
+            </motion.button>
+
+            {/* Scroll container */}
+            <div
+                ref={scrollRef}
+                className="flex overflow-x-auto gap-4 py-2 px-1 pb-4 scrollbar-hide snap-x"
+                role="list"
+                aria-label={ariaLabel}
+                onScroll={updateScrollState}
+            >
+                {children}
+            </div>
+
+            {/* Right arrow */}
+            <motion.button
+                aria-label="Scroll right"
+                onClick={() => scroll('right')}
+                style={{ ...arrowStyle, right: 0 }}
+                animate={{ opacity: isRowHovered && canScrollRight ? 1 : 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                tabIndex={canScrollRight ? 0 : -1}
+            >
+                <ChevronRight size={20} />
+            </motion.button>
+
+            {/* Right edge fade gradient */}
+            <div
+                style={{
+                    position: 'absolute',
+                    top: 0,
+                    right: 0,
+                    width: '80px',
+                    height: '100%',
+                    background: 'linear-gradient(to right, transparent, #0A0A0F)',
+                    pointerEvents: 'none',
+                    zIndex: 5,
+                }}
+            />
+        </div>
+    );
+};
+
+// ────────────────────────────────────────────────────────────────────────────
 const Home = () => {
     const prefersReducedMotion = useReducedMotion();
+    const navigate = useNavigate();
     const [heroMovies, setHeroMovies] = useState<Movie[]>([]);
     const [topRated, setTopRated] = useState<Movie[]>([]);
     const [newReleases, setNewReleases] = useState<Movie[]>([]);
@@ -116,12 +214,13 @@ const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
                     <AnimatePresence mode="wait">
                         <motion.div
                             key={`content-${activeIndex}`}
-                            className="absolute left-[5%] flex flex-col gap-6"
+                            className="absolute left-[5%] flex flex-col justify-end gap-6"
                             style={{
                                 bottom: '15%',
+                                maxHeight: '60%',
                             }}
                         >
-                            {/* Genre Chips */}
+                            {/* Genre Chips — always above title */}
                             {heroMovies[activeIndex].genres && heroMovies[activeIndex].genres.length > 0 && (
                                 <motion.div
                                     className="flex flex-wrap gap-2"
@@ -142,10 +241,16 @@ const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
                             {/* Title */}
                             <motion.h1
-                                className="font-display text-white leading-tight"
+                                className="font-display text-white"
                                 style={{
-                                    fontSize: 'clamp(48px, 8vw, 96px)',
-                                    maxWidth: '600px',
+                                    fontSize: 'clamp(32px, 5vw, 80px)',
+                                    maxWidth: '80%',
+                                    lineHeight: 1.05,
+                                    wordBreak: 'break-word',
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 3,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
                                 }}
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
@@ -157,7 +262,7 @@ const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
                             {/* Overview */}
                             <motion.p
-                                className="text-text-muted line-clamp-3"
+                                className={heroMovies[activeIndex].title.length > 20 ? 'line-clamp-2' : 'line-clamp-3'}
                                 style={{
                                     fontSize: '15px',
                                     color: '#D1D5DB',
@@ -222,7 +327,7 @@ const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
                     {/* Progress Dots (Bottom Center) */}
                     <div
-                        className="absolute flex gap-2 justify-center"
+                        className="absolute flex gap-2 justify-center flex-shrink-0"
                         style={{
                             bottom: '24px',
                             left: '50%',
@@ -263,26 +368,66 @@ const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
             {/* Trending Row */}
             <section>
-                <h2 className="text-2xl font-bold mb-4 px-2 border-l-4 border-indigo-500">Top Rated</h2>
-                <div className="flex overflow-x-auto gap-4 py-2 px-1 pb-4 scrollbar-hide snap-x" role="list" aria-label="Top Rated movies">
+                <div className="flex justify-between items-center mb-4 px-2">
+                    <h2 className="text-2xl font-bold border-l-4 border-indigo-500 pl-2">Top Rated</h2>
+                    <motion.button
+                        onClick={() => navigate('/search?category=top-rated')}
+                        className="flex items-center gap-1 bg-transparent border-none cursor-pointer"
+                        style={{ fontSize: '14px', fontWeight: '500', fontFamily: 'Inter, sans-serif', padding: '4px 0' }}
+                        initial={{ color: '#9CA3AF' }}
+                        whileHover="hover"
+                        animate={{ color: '#9CA3AF' }}
+                        variants={{ hover: { color: '#7C3AED' } }}
+                    >
+                        <span>View All</span>
+                        <motion.span
+                            variants={{ hover: { x: 4 } }}
+                            transition={{ duration: 0.2, ease: 'easeOut' }}
+                            style={{ display: 'flex', alignItems: 'center' }}
+                        >
+                            <ChevronRight size={16} />
+                        </motion.span>
+                    </motion.button>
+                </div>
+                <ScrollRow ariaLabel="Top Rated movies">
                     {topRated.map(movie => (
                         <div key={movie.imdbId} className="snap-start" role="listitem">
-                            <MediaCard item={movie} />
+                            <MediaCard item={movie} width="w-[225px]" height="h-[338px]" />
                         </div>
                     ))}
-                </div>
+                </ScrollRow>
             </section>
 
             {/* New Releases Row */}
             <section>
-                <h2 className="text-2xl font-bold mb-4 px-2 border-l-4 border-purple-500">New Releases</h2>
-                <div className="flex overflow-x-auto gap-4 py-2 px-1 pb-4 scrollbar-hide snap-x" role="list" aria-label="New release movies">
+                <div className="flex justify-between items-center mb-4 px-2">
+                    <h2 className="text-2xl font-bold border-l-4 border-purple-500 pl-2">New Releases</h2>
+                    <motion.button
+                        onClick={() => navigate('/search?category=new-releases')}
+                        className="flex items-center gap-1 bg-transparent border-none cursor-pointer"
+                        style={{ fontSize: '14px', fontWeight: '500', fontFamily: 'Inter, sans-serif', padding: '4px 0' }}
+                        initial={{ color: '#9CA3AF' }}
+                        whileHover="hover"
+                        animate={{ color: '#9CA3AF' }}
+                        variants={{ hover: { color: '#7C3AED' } }}
+                    >
+                        <span>View All</span>
+                        <motion.span
+                            variants={{ hover: { x: 4 } }}
+                            transition={{ duration: 0.2, ease: 'easeOut' }}
+                            style={{ display: 'flex', alignItems: 'center' }}
+                        >
+                            <ChevronRight size={16} />
+                        </motion.span>
+                    </motion.button>
+                </div>
+                <ScrollRow ariaLabel="New release movies">
                     {newReleases.map(movie => (
                         <div key={movie.imdbId} className="snap-start" role="listitem">
-                            <MediaCard item={movie} />
+                            <MediaCard item={movie} width="w-[225px]" height="h-[338px]" />
                         </div>
                     ))}
-                </div>
+                </ScrollRow>
             </section>
         </div>
     );
