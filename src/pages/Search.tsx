@@ -37,7 +37,7 @@ const Search = () => {
         return () => {
             if (placeholderRef.current) clearInterval(placeholderRef.current);
         };
-    }, [isFocused, query]);
+    }, [isFocused, query, placeholders.length]);
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();

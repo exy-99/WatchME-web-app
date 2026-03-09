@@ -327,7 +327,7 @@ const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
                     {/* Progress Dots (Bottom Center) */}
                     <div
-                        className="absolute flex gap-2 justify-center flex-shrink-0"
+                        className="absolute flex gap-2 justify-center shrink-0"
                         style={{
                             bottom: '24px',
                             left: '50%',
